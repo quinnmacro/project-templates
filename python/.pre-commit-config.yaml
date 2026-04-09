@@ -1,0 +1,55 @@
+# Python Pre-commit Hooks 模板
+# 安装: pre-commit install
+# 手动运行: pre-commit run --all-files
+
+repos:
+  # 通用检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        args: ['--allow-missing-credentials']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+
+  # Python 格式化
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3.13
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # 安全检查
+  - repo: https://github.com/pycqa/bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: ['-r', 'src/', '-ll']
+        files: ^src/
+
+  # 本地钩子 - 防止敏感文件提交
+  - repo: local
+    hooks:
+      - id: no-env-commit
+        name: Prevent .env commit
+        entry: bash -c 'git diff --cached --name-only | grep -E "\.env$" && echo "ERROR: .env files cannot be committed" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: no-secrets-in-code
+        name: Check for hardcoded secrets
+        entry: bash -c 'git diff --cached -U0 | grep -iE "(password|api_key|secret|token)\s*=\s*['\''\"][^'\''\"]+['\''\"]" && echo "WARNING: Possible hardcoded secret detected" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
