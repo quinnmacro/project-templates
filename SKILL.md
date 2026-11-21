@@ -51,6 +51,8 @@ description: Use when starting a new project or adding a toolchain to a fresh re
 - `mdformat` 钉 **0.7.x**：`mdformat-tables` 1.0.0 仍要求 `mdformat<0.8.0`，升上去就装不上
 - `astral-sh/setup-uv` 写 **v10.4.0**：该仓库没有 `v10` 浮动标签
 - 有 `uv.lock` 时 `uv sync` 用 `--frozen`；没有 lock 就别假装有
+- 新项目 `tests/` 为空时 pytest 退出码是 **5**（no tests collected）。CI 里把 5
+  当作通过、其余失败码照常失败，并在 README 注明「加第一条测试后恢复正常」
 - ESLint / `tsc` / vitest **不要**挂进 pre-commit，放 CI；pre-commit 只做语言无关的检查
 - 本地钩子用 Python 脚本，不要用 `bash -c`（Windows 上依赖 Git Bash，还不跨平台）
 
