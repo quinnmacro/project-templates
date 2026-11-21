@@ -1,42 +1,112 @@
-# Python 项目工具配置模板
-# 复制到项目的 pyproject.toml 末尾
+# =============================================================================
+# Python 工具链模板 — 2026 版（按 Quinn 的实际栈定制）
+# 用法：把本文件内容追加到项目 pyproject.toml 末尾
+# 前置：requires-python = ">=3.11"，且用 uv 管理依赖（uv.lock 入库）
+#
+# 设计原则
+#   1. ruff 一个工具同时负责 lint + format（不再需要 black / isort / bandit）
+#   2. 类型检查交给 mypy，与 pytest 一起进 CI
+#   3. FastAPI / pydantic / pandas 这套栈里最常见的误报已经预先放过
+# =============================================================================
 
 [tool.ruff]
 line-length = 100
+# 必须与 requires-python 的**下限**一致，否则 pyupgrade 会改出旧版本跑不了的代码
 target-version = "py311"
-select = ["E4", "E7", "E9", "F"]
-ignore = ["E722", "E402", "F402", "F841"]
+src = ["src", "tests"]
+extend-exclude = ["build", "dist", ".venv", "venv", "web", "frontend"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
-ignore = ["E722", "E402", "F402", "F841"]
+select = [
+    "E4", "E7", "E9",  # pycodestyle：语法级错误
+    "F",               # pyflakes：未定义名、未使用导入
+    "I",               # isort：导入排序（取代独立 isort）
+    "UP",              # pyupgrade：升级到新语法
+    "B",               # flake8-bugbear：常见陷阱
+    "SIM",             # flake8-simplify：可简化写法
+    "ASYNC",           # flake8-async：异步误用
+    "S",               # flake8-bandit：安全检查（取代独立 bandit）
+    "PT",              # flake8-pytest-style：pytest 写法规范
+    "RUF",             # ruff 自有规则
+]
+ignore = [
+    "E501",    # 行宽交给 formatter，lint 不重复管
+    "B008",    # 允许函数默认值里调用（FastAPI Depends / pydantic Field 等）
+    "B904",    # 允许 except 里直接 raise（本项目大量用）
+    "RUF001",  # 中文文档字符串里的全角标点是正常的
+    "RUF002",
+    "RUF003",
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["F401", "E712"]
+"tests/**"    = ["S101", "S105", "S106", "S311", "PT011"]  # assert / 占位密码 / 非加密随机 / pytest.raises 无 match
+"__init__.py" = ["F401"]                                    # 允许 re-export
+"scripts/**"  = ["S603", "S607"]                            # 允许 subprocess 调外部命令
 
-[tool.black]
-line-length = 100
-target-version = ["py311"]
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+known-third-party = ["xbbg", "wind", "WindPy"]
 
-[tool.isort]
-profile = "black"
-line_length = 100
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+# -----------------------------------------------------------------------------
+# 类型检查
+# -----------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true       # Bloomberg / Wind 等无 stub 的包直接放过
+exclude = ["tests/", "build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = ["xbbg.*", "WindPy.*", "blpapi.*", "financepy.*"]
+ignore_missing_imports = true
+
+# -----------------------------------------------------------------------------
+# 测试
+# -----------------------------------------------------------------------------
 
 [tool.pytest.ini_options]
+minversion = "8.0"
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
+addopts = "-ra --strict-markers --strict-config"
+# 需要 pytest-asyncio；未安装时删掉下面两行（--strict-config 会因未知配置项报错）
 asyncio_mode = "auto"
-addopts = "-v --tb=short"
+asyncio_default_fixture_loop_scope = "function"
+
+# -----------------------------------------------------------------------------
+# 覆盖率
+# -----------------------------------------------------------------------------
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["src/__main__.py", "*/__init__.py"]
+branch = true
+omit = ["src/__main__.py"]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
 ]
 show_missing = true
+skip_covered = true
+fail_under = 0
+
+# -----------------------------------------------------------------------------
+# uv
+# -----------------------------------------------------------------------------
+
+[tool.uv]
+# 依赖放 [project.dependencies]，开发工具放 [dependency-groups] dev
+# 例：
+# [dependency-groups]
+# dev = ["pytest", "pytest-asyncio", "pytest-cov", "ruff", "mypy", "pre-commit"]

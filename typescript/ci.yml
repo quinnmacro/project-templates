@@ -1,44 +1,86 @@
+# TypeScript / React / Next.js CI 模板 — 2026 版
+# 放到项目 .github/workflows/ci.yml
+#
+# 适配说明：
+#   - 用 pnpm 的话把三处 npm 换成 pnpm，并把 cache 换成 'pnpm'
+#   - Next.js 静态导出部署到 Cloudflare Pages 见文末注释
+#   - Vite 项目同样适用：lint / typecheck / build / test 脚本名一致
+
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
 
-      - name: Run linter
-        run: npm run lint
+      - run: npm ci
 
-  build:
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: 类型检查
+        run: npm run typecheck --if-present
+
+  build-and-test:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
 
-      - name: Build
+      - run: npm ci
+
+      - name: 构建
         run: npm run build
 
-      - name: Run tests (if available)
+      - name: 测试
         run: npm test --if-present
+
+# ---------------------------------------------------------------------------
+# 可选：部署到 Cloudflare Pages（Next.js 静态导出 / 纯 SPA）
+# 需要仓库 Secrets：CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID
+#
+#   deploy:
+#     needs: build-and-test
+#     if: github.ref == 'refs/heads/main'
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v7
+#       - uses: actions/setup-node@v7
+#         with: { node-version: "24", cache: npm }
+#       - run: npm ci && npm run build
+#       - uses: cloudflare/wrangler-action@v3
+#         with:
+#           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#           command: pages deploy out --project-name=<项目名>
+# ---------------------------------------------------------------------------

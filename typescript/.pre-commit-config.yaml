@@ -1,0 +1,50 @@
+# =============================================================================
+# pre-commit 模板（前端 / TypeScript 项目）— 2026 版
+#
+# 【设计取舍】
+#   只放**语言无关**的检查：文件卫生、密钥、敏感文件。
+#   ESLint / tsc / vitest 不放进 pre-commit —— 它们跑得慢，而且已经在
+#   npm scripts 和 CI 里各跑一遍，再挂一遍只会拖慢每次 commit。
+#
+# 【前置】
+#   把仓库根目录的 scripts/guard_staged.py 复制到项目根的 scripts/
+#   gitleaks 需要二进制：winget install --id Gitleaks.Gitleaks
+#
+# 【安装】
+#   pre-commit install && pre-commit run --all-files
+# =============================================================================
+
+repos:
+  # ---- 【必选】文件卫生 ----
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-illegal-windows-names
+      - id: detect-private-key
+      # 前端仓库最常见的误提交：构建产物和依赖目录
+      - id: forbid-submodules
+
+  # ---- 【必选】密钥扫描 ----
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks-system
+
+  # ---- 【必选】敏感文件守卫 ----
+  - repo: local
+    hooks:
+      - id: block-secret-files
+        name: 阻止提交 .env / 密钥文件
+        entry: python scripts/guard_staged.py files
+        language: python
+        pass_filenames: true

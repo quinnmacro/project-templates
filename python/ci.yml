@@ -1,61 +1,74 @@
+# 纯 Python 项目 CI 模板 — 2026 版
+# 放到项目 .github/workflows/ci.yml
+# 前置：用 uv 管理依赖，uv.lock 已入库
+
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
+  quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
         with:
-          python-version: '3.13'
+          persist-credentials: false
 
-      - name: Install linting tools
-        run: pip install ruff black isort
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          enable-cache: true
 
-      - name: Run ruff
-        run: ruff check src/ tests/
+      - name: 安装依赖
+        run: uv sync --all-groups --frozen
 
-      - name: Check black formatting
-        run: black --check src/ tests/
+      - name: Lint
+        run: uv run ruff check .
 
-      - name: Check isort
-        run: isort --check src/ tests/ --profile black
+      - name: Format 检查
+        run: uv run ruff format --check .
+
+      - name: 类型检查
+        run: uv run mypy src
 
   test:
-    needs: lint
+    needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
-
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - name: 安装依赖
+        run: uv sync --all-groups --frozen
 
-      - name: Install dependencies
-        run: uv sync --extra dev
-
-      - name: Run tests with coverage
+      - name: 测试 + 覆盖率
         run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: 上传覆盖率
         if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v7
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           fail_ci_if_error: false

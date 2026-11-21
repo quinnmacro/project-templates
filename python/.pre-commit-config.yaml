@@ -1,55 +1,102 @@
-# Python Pre-commit Hooks 模板
-# 安装: pre-commit install
-# 手动运行: pre-commit run --all-files
+# =============================================================================
+# pre-commit 模板（Python 项目）— 2026 版
+#
+# 【怎么取舍】
+#   每个块都标了必选 / 可选。用不到的直接把整个 repo 块删掉，YAML 仍然成立。
+#   - 只有 .py 没有文档 → 删掉「Markdown」整块
+#   - 纯脚本/一次性实验 → 只留「必选」两块 + ruff
+#   - 不是 Python 项目 → 直接用 ../typescript/.pre-commit-config.yaml
+#
+# 【前置】
+#   1. 把仓库根目录的 scripts/guard_staged.py 复制到项目根的 scripts/
+#   2. gitleaks 用 system 方式，需先装二进制：
+#        Windows: winget install --id Gitleaks.Gitleaks
+#        macOS:   brew install gitleaks
+#      不装就注释掉 gitleaks 块，detect-private-key 仍会兜底
+#
+# 【安装】
+#   pre-commit install && pre-commit run --all-files
+# =============================================================================
 
 repos:
-  # 通用检查
+  # ===========================================================================
+  # 【必选】文件卫生 —— 与语言无关，任何项目都建议保留
+  # ===========================================================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
       - id: check-yaml
+      - id: check-toml
+      - id: check-json
       - id: check-added-large-files
-        args: ['--maxkb=1000']
-      - id: detect-private-key
-      - id: detect-aws-credentials
-        args: ['--allow-missing-credentials']
+        args: ["--maxkb=1000"]
       - id: check-case-conflict
       - id: check-merge-conflict
+      - id: check-illegal-windows-names
+      - id: detect-private-key
 
-  # Python 格式化
-  - repo: https://github.com/psf/black
-    rev: 24.3.0
+  # ===========================================================================
+  # 【必选】密钥扫描（需要 gitleaks 二进制）
+  # ===========================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
     hooks:
-      - id: black
-        language_version: python3.13
+      - id: gitleaks-system
 
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+  # ===========================================================================
+  # 【可选·项目里有 .py 才需要】ruff：lint + format
+  # 没有 Python 代码就把这一块删掉
+  # ===========================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
     hooks:
-      - id: isort
-        args: ["--profile", "black"]
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
 
-  # 安全检查
-  - repo: https://github.com/pycqa/bandit
-    rev: 1.7.8
+  # ===========================================================================
+  # 【可选·文档多才需要】Markdown 格式化 + 规范检查
+  # 两个钩子都是纯 Python，不依赖 Node；不需要就整块删掉
+  # ⚠️ mdformat 必须钉 0.7.x：mdformat-tables 1.0.0 仍要求 mdformat<0.8.0
+  # ===========================================================================
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.22
     hooks:
-      - id: bandit
-        args: ['-r', 'src/', '-ll']
-        files: ^src/
+      - id: mdformat
+        args: ["--wrap", "100", "--number"]
+        additional_dependencies:
+          - mdformat-tables==1.0.0
+        exclude: (^|/)CHANGELOG\.md$
 
-  # 本地钩子 - 防止敏感文件提交
+  - repo: https://github.com/jackdewinter/pymarkdown
+    rev: v0.9.42
+    hooks:
+      - id: pymarkdown
+        # 全局选项必须写在 scan 子命令之前
+        args:
+          - "-d"
+          - "md013,md024,md025,md033,md041"
+          - "scan"
+
+  # ===========================================================================
+  # 【必选】自定义守卫（跨平台 Python，替代依赖 Git Bash 的 bash -c 钩子）
+  # block-secret-files 建议所有项目保留
+  # check-doc-links 只在文档/链接多的仓库有意义，否则删掉
+  # ===========================================================================
   - repo: local
     hooks:
-      - id: no-env-commit
-        name: Prevent .env commit
-        entry: bash -c 'git diff --cached --name-only | grep -E "\.env$" && echo "ERROR: .env files cannot be committed" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
+      - id: block-secret-files
+        name: 阻止提交 .env / 密钥文件
+        entry: python scripts/guard_staged.py files
+        language: python
+        pass_filenames: true
 
-      - id: no-secrets-in-code
-        name: Check for hardcoded secrets
-        entry: bash -c 'git diff --cached -U0 | grep -iE "(password|api_key|secret|token)\s*=\s*['\''\"][^'\''\"]+['\''\"]" && echo "WARNING: Possible hardcoded secret detected" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
+      - id: check-doc-links
+        name: 检查 Markdown 内部链接
+        entry: python scripts/guard_staged.py links
+        language: python
+        pass_filenames: true
