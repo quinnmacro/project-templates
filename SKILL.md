@@ -40,12 +40,27 @@ description: Use when starting a new project or adding a toolchain to a fresh re
 
 ## 硬规则
 
+- **版本一律照抄模板，不要凭记忆挑**。实测：不照抄时会写出 `checkout@v6`、`setup-uv@v6`
+  —— 落后当前版本，而且当事人自己也不确定
+- **密钥防护是必选**：`gitleaks` + `scripts/guard_staged.py files` 不能省
+- **不要自行加严规则集**。不要 `mypy --strict`，不要 `ANN` / `D` / `PL` 这类规则，
+  不要 `filterwarnings = ["error"]` —— 模板的规则集是按现有项目调过的
+- **只搭工具链，不生成业务骨架**。除非用户明确要求，不要写 `create_app()`、路由、示例测试
 - **不覆盖已存在的文件**：先读，再问用户要不要合并
 - `target-version` 必须等于 `requires-python` 下限，写高了 pyupgrade 会改出跑不了的代码
 - `mdformat` 钉 **0.7.x**：`mdformat-tables` 1.0.0 仍要求 `mdformat<0.8.0`，升上去就装不上
 - `astral-sh/setup-uv` 写 **v10.4.0**：该仓库没有 `v10` 浮动标签
+- 有 `uv.lock` 时 `uv sync` 用 `--frozen`；没有 lock 就别假装有
 - ESLint / `tsc` / vitest **不要**挂进 pre-commit，放 CI；pre-commit 只做语言无关的检查
 - 本地钩子用 Python 脚本，不要用 `bash -c`（Windows 上依赖 Git Bash，还不跨平台）
+
+## 交付前自检
+
+- [ ] pre-commit 里有 `gitleaks` 和 `guard_staged.py`
+- [ ] 所有 action 版本与模板一致（不是记忆里的）
+- [ ] 没有比模板更严的 lint / mypy / warnings 设置
+- [ ] 没有生成用户没要的业务代码
+- [ ] `pre-commit run --all-files` 第二次运行全绿
 
 ## 常见错误
 
