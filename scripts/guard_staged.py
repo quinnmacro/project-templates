@@ -14,10 +14,12 @@
 
 from __future__ import annotations
 
+import ntpath
 import re
 import sys
 from fnmatch import fnmatchcase
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 # .env 类的白名单：这些是要提交的模板文件
 ALLOWED_ENV = {".env.example", ".env.sample", ".env.template", ".env.dist", ".env.test"}
@@ -39,7 +41,15 @@ BLOCKED_NAME_PATTERNS = (
 )
 
 # 这些目录下的匹配不算（构建产物、第三方依赖）
-IGNORED_DIRS = {"node_modules", ".venv", "venv", "dist", "build", ".next", "site-packages"}
+IGNORED_DIRS = {
+    "node_modules",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".next",
+    "site-packages",
+}
 
 MD_LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
@@ -65,6 +75,34 @@ def check_files(paths: list[str]) -> list[str]:
     return problems
 
 
+def _repo_root(start: Path) -> Path:
+    """向上找 .git 作为检查边界；找不到就退回文件所在目录。"""
+    for parent in (start, *start.parents):
+        if (parent / ".git").exists():
+            return parent
+    return start
+
+
+def _safe_relative_target(target: str) -> str | None:
+    """只返回可安全检查的本仓库相对路径，否则返回 None。
+
+    必须拒绝带 scheme 的链接和 UNC / 绝对路径：对 ``\\\\server\\share`` 调用
+    ``exists()`` 会让 Windows 发起 SMB 连接并泄漏 NTLM 凭据。
+    """
+    cleaned = unquote(target).split("#", 1)[0].split("?", 1)[0].strip()
+    if not cleaned:
+        return None
+    if urlsplit(cleaned).scheme:  # http: / https: / file: / javascript: ...
+        return None
+    if cleaned.startswith(("/", "\\")):  # 绝对路径、UNC（\\\\server\\share）
+        return None
+    if ntpath.splitdrive(cleaned)[0]:  # C: / D: 等盘符
+        return None
+    if cleaned.startswith("<"):  # <mailto:...> 之类
+        return None
+    return cleaned
+
+
 def check_links(paths: list[str]) -> list[str]:
     problems: list[str] = []
     for raw in paths:
@@ -75,13 +113,20 @@ def check_links(paths: list[str]) -> list[str]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+
+        base = path.parent
+        root = _repo_root(base).resolve()
         for target in MD_LINK.findall(text):
-            if re.match(r"^(https?:|mailto:|#|<)", target):
+            cleaned = _safe_relative_target(target)
+            if cleaned is None:
                 continue
-            cleaned = target.split("#", 1)[0].split("?", 1)[0]
-            if not cleaned:
+            try:
+                resolved = (base / cleaned).resolve()
+            except (OSError, RuntimeError):
                 continue
-            resolved = (path.parent / cleaned).resolve()
+            # 解析后必须仍在仓库内：拦掉 ../ 逃逸和符号链接指向仓库外
+            if not resolved.is_relative_to(root):
+                continue
             if not resolved.exists():
                 problems.append(f"{raw}  → 断链: {target}")
     return problems
@@ -105,7 +150,10 @@ def main(argv: list[str]) -> int:
     for item in problems:
         print(f"  - {item}", file=sys.stderr)
     if mode == "files":
-        print("\n确实需要提交请改用 .env.example 之类模板，或询问仓库所有者。", file=sys.stderr)
+        print(
+            "\n确实需要提交请改用 .env.example 之类模板，或询问仓库所有者。",
+            file=sys.stderr,
+        )
     return 1
 
 
