@@ -1,6 +1,19 @@
-# Shared Configs
+# Project Templates
 
-个人项目配置模板库 —— 避免每个新项目重复搭工具链。
+个人项目脚手架模板库 —— 避免每个新项目重复搭工具链。
+
+> 原名 `shared-configs`，2026-11-21 改名为 `project-templates`（GitHub 已改，
+> 本地目录因本会话持有 `.git` 句柄暂未改名，重启后补，见文末）。
+
+## 作为 Claude Code skill 使用
+
+本仓库同时是一个技能：根目录的 `SKILL.md` 定义了 `project-scaffold`，
+通过 junction 挂到 `~/.claude/skills/project-scaffold`。
+
+新建项目时只要说「新建项目 / 初始化仓库 / 配一下 CI」，Claude 就会：
+读本仓库的模板 → 按项目类型选 profile → 复制并校验，而不是临场发挥。
+
+**改模板 = 改 skill**，两者是同一份文件，不会漂移。
 
 **2026-11 改版**：按实际技术栈（FastAPI + Next.js + uv + Cloudflare）重写，
 移除 black / isort / bandit（ruff 已完全取代），修掉弃用配置，版本号全部对齐当前。
@@ -179,3 +192,19 @@ git push
 ```
 
 各项目需手动同步 —— 这是模板库不是包，没有自动分发。
+
+---
+
+## 待办：本地目录改名
+
+GitHub 仓库已改名 `project-templates`，但本地目录仍是 `shared-configs`
+（改名那一刻本会话正持有 `.git` 句柄）。重启 Claude Code 后执行：
+
+```powershell
+Move-Item C:\Users\Q\Code\shared-configs C:\Users\Q\Code\project-templates
+Remove-Item "$env:USERPROFILE\.claude\skills\project-scaffold" -Force
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\project-scaffold" `
+  -Target C:\Users\Q\Code\project-templates
+```
+
+junction 存的是绝对路径，所以**改名后必须重建**，否则技能会失效。
